@@ -67,9 +67,14 @@ hexdump(char *desc, void *buf, int len) {
 }
 
 static void
-print_packet(char *buf, int len) {
+print_packet(char *buf, int len, int tx) {
 	bzero(pkt, sizeof(pkt));
 	memcpy(pkt, (void*)buf, len);
+	if (tx) {
+		printf("------TX(copied)------\n");
+	} else {
+		printf("------RX------\n");
+	}
 	hexdump(NULL, pkt, len);
 }
 
@@ -173,17 +178,22 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 			rs->flags |= NS_BUF_CHANGED;
 			/* copy the NS_MOREFRAG */
 			rs->flags = (rs->flags & ~NS_MOREFRAG) | (ts->flags & NS_MOREFRAG);
+			printf("%s -> %s -- ", if_src, if_dst);
+			char *txbuf = NETMAP_BUF(txring, ts->buf_idx);
+			filter(txbuf, ts->len);
+			if (verbose > 0) {
+				print_packet(txbuf, ts->len, 1);
+			}
 		} else {
 			printf("%s -> %s -- ", if_src, if_dst);
 			char *rxbuf = NETMAP_BUF(rxring, rs->buf_idx);
 			filter(rxbuf, rs->len);
 			if (verbose > 0)
-				print_packet(rxbuf, rs->len);
+				print_packet(rxbuf, rs->len, 0);
 			char *txbuf = NETMAP_BUF(txring, ts->buf_idx);
 			nm_pkt_copy(rxbuf, txbuf, ts->len);
-			filter(txbuf, ts->len);
-			if (verbose > 0)
-				print_packet(txbuf, ts->len);
+			if (verbose > 0) 
+				print_packet(txbuf, ts->len, 1);
 		}
 		j = nm_ring_next(rxring, j);
 		k = nm_ring_next(txring, k);
